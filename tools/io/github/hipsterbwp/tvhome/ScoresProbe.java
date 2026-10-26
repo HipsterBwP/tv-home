@@ -9,6 +9,7 @@ public class ScoresProbe {
                     + " at " + g.homeName + " " + g.homeScore + (g.homeWon ? " (W)" : "")
                     + " | " + g.status + (g.live ? " | LIVE" : g.upcoming ? " | upcoming" : " | final"));
         }
+        for (String p : Scores.problems) System.out.println("left out: " + p);
         System.out.println(games.size() + " of " + Scores.TEAMS.length + " teams in season");
     }
 }

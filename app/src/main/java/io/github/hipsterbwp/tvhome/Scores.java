@@ -33,16 +33,22 @@ final class Scores {
         long start;
     }
 
+    /** Why each team was left out on the last load, for the workflow's scores check. */
+    static final List<String> problems = new ArrayList<>();
+
     /** One entry per team that is in season; nothing for teams between seasons or on errors. */
     static List<Game> load() {
+        problems.clear();
         List<Game> out = new ArrayList<>();
         long now = System.currentTimeMillis();
         for (String[] t : TEAMS) {
             try {
                 Game g = pick(t, now);
                 if (g != null) out.add(g);
-            } catch (Exception ignored) {
+                else problems.add(t[0] + ": no game within two weeks");
+            } catch (Exception e) {
                 // Feed unreachable or changed: leave this team out rather than show stale data.
+                problems.add(t[0] + ": " + e);
             }
         }
         return out;
