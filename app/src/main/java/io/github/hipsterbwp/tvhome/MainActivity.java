@@ -8,6 +8,11 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.graphics.Typeface;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -23,7 +28,9 @@ import android.widget.TextClock;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The home screen: a full-screen picture, a fading list of app names on the left, the time
@@ -51,7 +58,10 @@ public class MainActivity extends Activity {
     private ImageView photo;
     private LinearLayout list;
     private TextView weatherView, creditView;
-    private View allApps;
+    private View inputs, allApps;
+    private LinearLayout scoresBox;
+    private TextView verseText, verseRef;
+    private int verseDay = -1;
     private Weather weather;
     private Wallpaper wallpaper;
     private SharedPreferences ui;
@@ -67,6 +77,32 @@ public class MainActivity extends Activity {
                 }
             });
             handler.postDelayed(this, WEATHER_REFRESH_MS);
+        }
+    };
+
+    private final Runnable scoresTick = new Runnable() {
+        @Override
+        public void run() {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    final List<Scores.Game> games = Scores.load();
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            showScores(games);
+                        }
+                    });
+                }
+            }, "scores").start();
+        }
+    };
+
+    private final Runnable verseTick = new Runnable() {
+        @Override
+        public void run() {
+            showVerse();
+            handler.postDelayed(this, 10 * 60 * 1000L);
         }
     };
 
@@ -129,9 +165,51 @@ public class MainActivity extends Activity {
         lp.topMargin = Math.round(screenH * 0.20f);
         root.addView(scroller, lp);
 
+        scoresBox = new LinearLayout(this);
+        scoresBox.setOrientation(LinearLayout.VERTICAL);
+        FrameLayout.LayoutParams sbp = new FrameLayout.LayoutParams(
+                Tiles.dp(this, 170), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        sbp.rightMargin = side;
+        sbp.topMargin = Tiles.dp(this, 86);
+        root.addView(scoresBox, sbp);
+
+        LinearLayout verse = new LinearLayout(this);
+        verse.setOrientation(LinearLayout.VERTICAL);
+        verse.setGravity(Gravity.CENTER_HORIZONTAL);
+        verseText = new TextView(this);
+        verseText.setTextColor(Color.WHITE);
+        verseText.setTypeface(Typeface.create("sans-serif", Typeface.ITALIC));
+        verseText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        verseText.setGravity(Gravity.CENTER_HORIZONTAL);
+        verseText.setLineSpacing(0, 1.15f);
+        verseText.setShadowLayer(Tiles.dp(this, 5), 0, Tiles.dp(this, 1), 0xB3000000);
+        verse.addView(verseText);
+        verseRef = new TextView(this);
+        verseRef.setTextColor(0xCCFFFFFF);
+        verseRef.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        verseRef.setLetterSpacing(0.12f);
+        verseRef.setShadowLayer(Tiles.dp(this, 4), 0, Tiles.dp(this, 1), 0xB3000000);
+        LinearLayout.LayoutParams vrp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        vrp.topMargin = Tiles.dp(this, 6);
+        verse.addView(verseRef, vrp);
+        FrameLayout.LayoutParams vp = new FrameLayout.LayoutParams(
+                Tiles.dp(this, 500), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        vp.bottomMargin = Tiles.dp(this, 34);
+        root.addView(verse, vp);
+
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.VERTICAL);
         actions.setGravity(Gravity.END);
+        inputs = Tiles.button(this, Icons.input(), "Inputs", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                lastFocused = "#inputs";
+                startActivity(new Intent(MainActivity.this, InputsActivity.class));
+            }
+        });
+        inputs.setId(View.generateViewId());
+        actions.addView(inputs);
         allApps = Tiles.button(this, Icons.grid(), "All apps", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -196,11 +274,17 @@ public class MainActivity extends Activity {
         weatherView.setVisibility(showWeather ? View.VISIBLE : View.GONE);
         handler.removeCallbacks(weatherTick);
         if (showWeather) handler.post(weatherTick);
+        handler.removeCallbacks(verseTick);
+        handler.post(verseTick);
+        handler.removeCallbacks(scoresTick);
+        handler.post(scoresTick);
     }
 
     @Override
     protected void onPause() {
         handler.removeCallbacks(weatherTick);
+        handler.removeCallbacks(verseTick);
+        handler.removeCallbacks(scoresTick);
         super.onPause();
     }
 
@@ -237,7 +321,7 @@ public class MainActivity extends Activity {
                             Tiles.launch(MainActivity.this, launch);
                         }
                     });
-            row.setNextFocusRightId(allApps.getId());
+            row.setNextFocusRightId(inputs.getId());
             rows.add(row);
             keys.add(pkg);
         }
@@ -251,5 +335,75 @@ public class MainActivity extends Activity {
         int focus = lastFocused == null ? 0 : keys.indexOf(lastFocused);
         if (focus >= 0 && focus < rows.size()) rows.get(focus).requestFocus();
         else allApps.requestFocus();
+    }
+
+    private void showVerse() {
+        Calendar now = Calendar.getInstance();
+        int day = Verse.dayKey(now);
+        if (day == verseDay) return;
+        Verse v = Verse.forDay(this, now);
+        if (v == null) return;
+        verseDay = day;
+        verseText.setText("\u201C" + v.text + "\u201D");
+        verseRef.setText(v.reference.toUpperCase(Locale.US) + " \u00B7 NKJV");
+    }
+
+    /** Renders the in-season teams and schedules the next refresh: every minute around games. */
+    private void showScores(List<Scores.Game> games) {
+        scoresBox.removeAllViews();
+        long now = System.currentTimeMillis();
+        boolean busy = false;
+        for (Scores.Game g : games) {
+            busy |= g.live || g.upcoming && g.start - now < 30 * 60 * 1000L;
+            LinearLayout block = new LinearLayout(this);
+            block.setOrientation(LinearLayout.VERTICAL);
+            block.addView(scoreText(g.heading, 10, 0xBFFFFFFF, true));
+            block.addView(scoreLine(g.awayName, g.awayScore, g.awayWon));
+            block.addView(scoreLine(g.homeName, g.homeScore, g.homeWon));
+            TextView st = scoreText(g.live ? "\u25CF LIVE  " + g.status : g.status, 10, 0xBFFFFFFF, false);
+            if (g.live) {
+                SpannableString span = new SpannableString(st.getText());
+                span.setSpan(new ForegroundColorSpan(0xFFFF5A5A), 0, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                st.setText(span);
+            }
+            block.addView(st);
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            bp.bottomMargin = Tiles.dp(this, 17);
+            scoresBox.addView(block, bp);
+        }
+        handler.removeCallbacks(scoresTick);
+        handler.postDelayed(scoresTick, busy ? 60 * 1000L : 15 * 60 * 1000L);
+    }
+
+    private TextView scoreText(String text, float sp, int color, boolean heading) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextColor(color);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setShadowLayer(Tiles.dp(this, 3), 0, Tiles.dp(this, 1), 0x80000000);
+        if (heading) {
+            t.setLetterSpacing(0.15f);
+            t.setTypeface(Tiles.MEDIUM);
+            t.setPadding(0, 0, 0, Tiles.dp(this, 4));
+        }
+        return t;
+    }
+
+    private View scoreLine(String team, String score, boolean won) {
+        LinearLayout line = new LinearLayout(this);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        int color = won ? Color.WHITE : 0xD9FFFFFF;
+        TextView name = scoreText(team == null ? "" : team, 16, color, false);
+        TextView pts = scoreText(score == null ? "" : score, 16, color, false);
+        if (won) {
+            name.setTypeface(Typeface.DEFAULT_BOLD);
+            pts.setTypeface(Typeface.DEFAULT_BOLD);
+        }
+        line.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        line.addView(pts);
+        return line;
     }
 }

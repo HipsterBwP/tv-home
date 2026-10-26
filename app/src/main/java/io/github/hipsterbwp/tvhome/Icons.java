@@ -44,6 +44,21 @@ final class Icons {
         };
     }
 
+    /** A screen with an arrow coming in from the left. */
+    static Drawable input() {
+        return new Line() {
+            @Override
+            void paint(Canvas c, float s, Paint p) {
+                float o = p.getStrokeWidth() / 2;
+                RectF r = new RectF(s * 0.30f, s * 0.18f, s - o, s * 0.82f);
+                c.drawRoundRect(r, s * 0.08f, s * 0.08f, p);
+                c.drawLine(o, s * 0.5f, s * 0.62f, s * 0.5f, p);
+                c.drawLine(s * 0.62f, s * 0.5f, s * 0.48f, s * 0.36f, p);
+                c.drawLine(s * 0.62f, s * 0.5f, s * 0.48f, s * 0.64f, p);
+            }
+        };
+    }
+
     private abstract static class Line extends Drawable {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 

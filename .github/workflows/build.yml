@@ -73,3 +73,21 @@ jobs:
       - name: Remove decrypted key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+  # Runs the widget's score logic against ESPN's live feed and prints the result,
+  # so a change in ESPN's format shows up here before it shows up on the TV.
+  scores-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Check live scores
+        run: |
+          curl -fsSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
+          src=app/src/main/java/io/github/hipsterbwp/tvhome
+          javac -d out -cp json.jar $src/Scores.java $src/Net.java tools/io/github/hipsterbwp/tvhome/ScoresProbe.java
+          java -cp out:json.jar io.github.hipsterbwp.tvhome.ScoresProbe
