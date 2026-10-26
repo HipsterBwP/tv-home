@@ -357,10 +357,9 @@ public class MainActivity extends Activity {
             busy |= g.live || g.upcoming && g.start - now < 30 * 60 * 1000L;
             LinearLayout block = new LinearLayout(this);
             block.setOrientation(LinearLayout.VERTICAL);
-            block.addView(scoreText(g.heading, 10, 0xBFFFFFFF, true));
             block.addView(scoreLine(g.awayName, g.awayScore, g.awayWon));
             block.addView(scoreLine(g.homeName, g.homeScore, g.homeWon));
-            TextView st = scoreText(g.live ? "\u25CF LIVE  " + g.status : g.status, 10, 0xBFFFFFFF, false);
+            TextView st = scoreText(g.live ? "\u25CF LIVE  " + g.status : g.status, 10, 0xBFFFFFFF);
             if (g.live) {
                 SpannableString span = new SpannableString(st.getText());
                 span.setSpan(new ForegroundColorSpan(0xFFFF5A5A), 0, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -369,14 +368,14 @@ public class MainActivity extends Activity {
             block.addView(st);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            bp.bottomMargin = Tiles.dp(this, 17);
+            bp.bottomMargin = Tiles.dp(this, 20);
             scoresBox.addView(block, bp);
         }
         handler.removeCallbacks(scoresTick);
         handler.postDelayed(scoresTick, busy ? 60 * 1000L : 15 * 60 * 1000L);
     }
 
-    private TextView scoreText(String text, float sp, int color, boolean heading) {
+    private TextView scoreText(String text, float sp, int color) {
         TextView t = new TextView(this);
         t.setText(text);
         t.setTextColor(color);
@@ -384,11 +383,6 @@ public class MainActivity extends Activity {
         t.setSingleLine(true);
         t.setEllipsize(TextUtils.TruncateAt.END);
         t.setShadowLayer(Tiles.dp(this, 3), 0, Tiles.dp(this, 1), 0x80000000);
-        if (heading) {
-            t.setLetterSpacing(0.15f);
-            t.setTypeface(Tiles.MEDIUM);
-            t.setPadding(0, 0, 0, Tiles.dp(this, 4));
-        }
         return t;
     }
 
@@ -396,8 +390,8 @@ public class MainActivity extends Activity {
         LinearLayout line = new LinearLayout(this);
         line.setOrientation(LinearLayout.HORIZONTAL);
         int color = won ? Color.WHITE : 0xD9FFFFFF;
-        TextView name = scoreText(team == null ? "" : team, 16, color, false);
-        TextView pts = scoreText(score == null ? "" : score, 16, color, false);
+        TextView name = scoreText(team == null ? "" : team, 16, color);
+        TextView pts = scoreText(score == null ? "" : score, 16, color);
         if (won) {
             name.setTypeface(Typeface.DEFAULT_BOLD);
             pts.setTypeface(Typeface.DEFAULT_BOLD);

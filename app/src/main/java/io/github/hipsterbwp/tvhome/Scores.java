@@ -15,7 +15,7 @@ import java.util.TimeZone;
  * document it, so it may change). Call {@link #load} off the main thread.
  */
 final class Scores {
-    /** A followed team: heading, ESPN sport path and team id. */
+    /** A followed team: name (for problem reports), ESPN sport path and team id. */
     static final String[][] TEAMS = {
             {"WILDCATS FOOTBALL", "football/college-football", "96"},
             {"WILDCATS BASKETBALL", "basketball/mens-college-basketball", "96"},
@@ -28,7 +28,7 @@ final class Scores {
     private static final long FINAL_MS = 36L * 60 * 60 * 1000;
 
     static final class Game {
-        String heading, homeName, awayName, homeScore, awayScore, status;
+        String homeName, awayName, homeScore, awayScore, status;
         boolean live, upcoming, homeWon, awayWon;
         long start;
     }
@@ -73,11 +73,11 @@ final class Scores {
             else if ("pre".equals(state) && t > now - 6 * 3600_000L && t < nextT) { next = e; nextT = t; }
         }
 
-        if (live != null) return game(team[0], live, refresh(team, live));
+        if (live != null) return game(live, refresh(team, live));
         boolean recentFinal = last != null && now - lastT < FINAL_MS;
-        if (recentFinal) return game(team[0], last, null);
-        if (next != null && nextT - now < WINDOW_MS) return game(team[0], next, null);
-        if (last != null && now - lastT < WINDOW_MS) return game(team[0], last, null);
+        if (recentFinal) return game(last, null);
+        if (next != null && nextT - now < WINDOW_MS) return game(next, null);
+        if (last != null && now - lastT < WINDOW_MS) return game(last, null);
         return null;
     }
 
@@ -91,11 +91,10 @@ final class Scores {
         }
     }
 
-    private static Game game(String heading, JSONObject event, JSONObject fresh) throws Exception {
+    private static Game game(JSONObject event, JSONObject fresh) throws Exception {
         JSONObject comp = fresh != null ? fresh : event.getJSONArray("competitions").getJSONObject(0);
         JSONObject type = comp.getJSONObject("status").getJSONObject("type");
         Game g = new Game();
-        g.heading = heading;
         g.start = time(event.optString("date"));
         String state = type.optString("state");
         g.live = "in".equals(state);
