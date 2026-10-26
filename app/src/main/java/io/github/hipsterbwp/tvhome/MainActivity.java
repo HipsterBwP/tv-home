@@ -30,6 +30,8 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +68,7 @@ public class MainActivity extends Activity {
     private List<Scores.League> scoreLeagues = new ArrayList<>();
     private final List<FrameLayout> scoreSlots = new ArrayList<>();
     private final Map<String, Integer> scorePos = new HashMap<>();
+    private long scoreRetryMs = 60 * 1000L;
     private TextView verseText, verseRef;
     private int verseDay = -1;
     private Weather weather;
@@ -92,11 +95,11 @@ public class MainActivity extends Activity {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    final List<Scores.League> leagues = Scores.load();
+                    final Scores.Result result = Scores.load();
                     handler.post(new Runnable() {
                         @Override
                         public void run() {
-                            showScores(leagues);
+                            showScores(result);
                         }
                     });
                 }
@@ -371,8 +374,22 @@ public class MainActivity extends Activity {
         verseRef.setText(v.reference.toUpperCase(Locale.US) + " \u00B7 NKJV");
     }
 
-    /** Rebuilds the league sections and schedules the next refresh: every minute around games. */
-    private void showScores(List<Scores.League> leagues) {
+    /**
+     * Rebuilds the league sections and schedules the next refresh: every minute around games, and
+     * soon after a failed read (1, 2, 4... up to 15 minutes), so scores return quickly after the TV
+     * restarts before its network is up. A league that failed keeps its last scores meanwhile.
+     */
+    private void showScores(Scores.Result result) {
+        List<Scores.League> leagues = new ArrayList<>(result.leagues);
+        for (Scores.League old : scoreLeagues) {
+            if (result.failed.contains(old.heading)) leagues.add(old);
+        }
+        Collections.sort(leagues, new Comparator<Scores.League>() {
+            @Override
+            public int compare(Scores.League a, Scores.League b) {
+                return Scores.order(a.heading) - Scores.order(b.heading);
+            }
+        });
         scoresBox.removeAllViews();
         scoreSlots.clear();
         long now = System.currentTimeMillis();
@@ -402,7 +419,14 @@ public class MainActivity extends Activity {
             scoresBox.addView(section, bp);
         }
         handler.removeCallbacks(scoresTick);
-        handler.postDelayed(scoresTick, busy ? 60 * 1000L : 15 * 60 * 1000L);
+        long next = busy ? 60 * 1000L : 15 * 60 * 1000L;
+        if (result.failed.isEmpty()) {
+            scoreRetryMs = 60 * 1000L;
+        } else {
+            next = Math.min(next, scoreRetryMs);
+            scoreRetryMs = Math.min(scoreRetryMs * 2, 15 * 60 * 1000L);
+        }
+        handler.postDelayed(scoresTick, next);
     }
 
     /** Moves every league with more than one game on to its next game, with a short fade. */

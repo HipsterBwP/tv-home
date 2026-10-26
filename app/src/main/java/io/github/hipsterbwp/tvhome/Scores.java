@@ -44,16 +44,31 @@ final class Scores {
         }
     }
 
-    /** Leagues with at least one game near now; a league whose feed fails is left out. */
-    static List<League> load() {
-        List<League> out = new ArrayList<>();
+    /** Position of a league in the on-screen order. */
+    static int order(String heading) {
+        for (int i = 0; i < LEAGUES.length; i++) if (LEAGUES[i][0].equals(heading)) return i;
+        return LEAGUES.length;
+    }
+
+    /** One load: the leagues with a game near now, and the leagues whose feed could not be read. */
+    static final class Result {
+        final List<League> leagues = new ArrayList<>();
+        final List<String> failed = new ArrayList<>();
+    }
+
+    /**
+     * Leagues with at least one game near now. A league whose feed fails (no network yet after a
+     * restart, a timeout) is reported in {@link Result#failed} rather than treated as having no games.
+     */
+    static Result load() {
+        Result out = new Result();
         long now = System.currentTimeMillis();
         for (Object[] l : LEAGUES) {
             try {
                 League league = league((String) l[0], (String) l[1], (String) l[2], (Boolean) l[3], now);
-                if (!league.games.isEmpty()) out.add(league);
-            } catch (Exception ignored) {
-                // Feed unreachable or changed: leave this league out rather than show stale data.
+                if (!league.games.isEmpty()) out.leagues.add(league);
+            } catch (Exception e) {
+                out.failed.add((String) l[0]);
             }
         }
         return out;
