@@ -1,26 +1,32 @@
 package io.github.hipsterbwp.tvhome;
 
 import android.content.ActivityNotFoundException;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.FrameLayout;
+import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Builds focusable app tiles and launches apps; shared by the home and all-apps screens. */
+import java.util.List;
+
+/** App lookup and launching, plus the focusable dock items and buttons shared by both screens. */
 final class Tiles {
     private Tiles() {}
+
+    static final Typeface LIGHT = Typeface.create("sans-serif-light", Typeface.NORMAL);
+    static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
     static int dp(Context c, float v) {
         return Math.round(TypedValue.applyDimension(
@@ -49,17 +55,6 @@ final class Tiles {
         }
     }
 
-    static Drawable banner(PackageManager pm, Intent launch) {
-        ComponentName cn = launch.getComponent();
-        if (cn == null) return null;
-        try {
-            Drawable d = pm.getActivityBanner(cn);
-            return d != null ? d : pm.getApplicationBanner(cn.getPackageName());
-        } catch (PackageManager.NameNotFoundException e) {
-            return null;
-        }
-    }
-
     static CharSequence label(PackageManager pm, String pkg, CharSequence fallback) {
         try {
             return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0));
@@ -68,69 +63,116 @@ final class Tiles {
         }
     }
 
-    /** A 16:9 tile showing the app banner, or its icon and name when it has no banner. */
-    static View tile(Context c, Drawable banner, Drawable icon, CharSequence name,
-                     int width, int height, View.OnClickListener onClick) {
-        final FrameLayout tile = new FrameLayout(c);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(c, 10));
-        tile.setBackground(bg);
-        tile.setClipToOutline(true);
-        tile.setFocusable(true);
-        tile.setClickable(true);
-        tile.setContentDescription(name);
-        tile.setOnClickListener(onClick);
-
-        if (banner != null) {
-            ImageView img = new ImageView(c);
-            img.setImageDrawable(banner);
-            img.setScaleType(ImageView.ScaleType.FIT_XY);
-            tile.addView(img, new FrameLayout.LayoutParams(width, height));
-        } else {
-            LinearLayout box = new LinearLayout(c);
-            box.setOrientation(LinearLayout.VERTICAL);
-            box.setGravity(Gravity.CENTER);
-            if (icon != null) {
-                ImageView img = new ImageView(c);
-                img.setImageDrawable(icon);
-                int s = Math.min(dp(c, 64), height / 2);
-                box.addView(img, new LinearLayout.LayoutParams(s, s));
-            }
-            TextView t = new TextView(c);
-            t.setText(name);
-            t.setTextColor(Color.WHITE);
-            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-            t.setGravity(Gravity.CENTER);
-            t.setSingleLine(true);
-            box.addView(t);
-            tile.addView(box, new FrameLayout.LayoutParams(width, height));
+    static Drawable icon(PackageManager pm, String pkg) {
+        try {
+            return pm.getApplicationIcon(pkg);
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
         }
-
-        final GradientDrawable ring = new GradientDrawable();
-        ring.setColor(Color.TRANSPARENT);
-        ring.setStroke(dp(c, 4), Color.WHITE);
-        ring.setCornerRadius(dp(c, 10));
-        tile.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View v, boolean focused) {
-                tile.setForeground(focused ? ring : null);
-                float s = focused ? 1.08f : 1f;
-                v.animate().scaleX(s).scaleY(s).translationZ(focused ? dp(v.getContext(), 8) : 0)
-                        .setDuration(120).start();
-            }
-        });
-        return tile;
     }
 
-    /** Lays tiles out in rows of {@code columns}, centred, with {@code gap} spacing. */
-    static LinearLayout grid(Context c, java.util.List<View> tiles, int columns, int width,
-                             int height, int gap) {
+    static GradientDrawable rounded(int color, float radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(radius);
+        return d;
+    }
+
+    /** Icon over a name; focus brightens it and adds a soft light pill behind it. */
+    static View item(Context c, Drawable icon, CharSequence name, int width, View.OnClickListener onClick) {
+        final LinearLayout box = new LinearLayout(c);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(c, 6), dp(c, 12), dp(c, 6), dp(c, 10));
+        box.setFocusable(true);
+        box.setClickable(true);
+        box.setContentDescription(name);
+        box.setOnClickListener(onClick);
+
+        final ImageView img = new ImageView(c);
+        img.setImageDrawable(icon);
+        img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        final int corner = dp(c, 12);
+        img.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), corner);
+            }
+        });
+        img.setClipToOutline(true);
+        int s = dp(c, 52);
+        box.addView(img, new LinearLayout.LayoutParams(s, s));
+
+        final TextView t = new TextView(c);
+        t.setText(name);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        t.setTypeface(MEDIUM);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setShadowLayer(dp(c, 3), 0, dp(c, 1), 0x66000000);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tp.topMargin = dp(c, 8);
+        box.addView(t, tp);
+
+        final GradientDrawable pill = rounded(0x40FFFFFF, dp(c, 18));
+        img.setAlpha(0.82f);
+        t.setAlpha(0.78f);
+        box.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean focused) {
+                box.setBackground(focused ? pill : null);
+                img.animate().alpha(focused ? 1f : 0.82f).setDuration(150).start();
+                t.animate().alpha(focused ? 1f : 0.78f).setDuration(150).start();
+                v.animate().scaleX(focused ? 1.06f : 1f).scaleY(focused ? 1.06f : 1f)
+                        .setDuration(150).start();
+            }
+        });
+        box.setLayoutParams(new LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return box;
+    }
+
+    /** A small top-bar button: line icon and text, with a light pill when focused. */
+    static View button(Context c, Drawable icon, String text, View.OnClickListener onClick) {
+        final LinearLayout b = new LinearLayout(c);
+        b.setOrientation(LinearLayout.HORIZONTAL);
+        b.setGravity(Gravity.CENTER_VERTICAL);
+        b.setPadding(dp(c, 14), dp(c, 8), dp(c, 16), dp(c, 8));
+        b.setFocusable(true);
+        b.setClickable(true);
+        b.setOnClickListener(onClick);
+        ImageView img = new ImageView(c);
+        img.setImageDrawable(icon);
+        int s = dp(c, 18);
+        b.addView(img, new LinearLayout.LayoutParams(s, s));
+        TextView t = new TextView(c);
+        t.setText(text);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        t.setShadowLayer(dp(c, 3), 0, dp(c, 1), 0x66000000);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tp.leftMargin = dp(c, 8);
+        b.addView(t, tp);
+        final GradientDrawable pill = rounded(0x40FFFFFF, dp(c, 20));
+        b.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean focused) {
+                b.setBackground(focused ? pill : null);
+            }
+        });
+        return b;
+    }
+
+    /** Lays views out in rows of {@code columns}. */
+    static LinearLayout grid(Context c, List<View> items, int columns, int gap) {
         LinearLayout rows = new LinearLayout(c);
         rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setClipChildren(false);
         LinearLayout row = null;
-        for (int i = 0; i < tiles.size(); i++) {
+        for (int i = 0; i < items.size(); i++) {
             if (i % columns == 0) {
                 row = new LinearLayout(c);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -140,11 +182,11 @@ final class Tiles {
                 rp.bottomMargin = gap;
                 rows.addView(row, rp);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height);
+            View v = items.get(i);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) v.getLayoutParams();
             if (i % columns != 0) lp.leftMargin = gap;
-            row.addView(tiles.get(i), lp);
+            row.addView(v, lp);
         }
-        rows.setClipChildren(false);
         return rows;
     }
 }

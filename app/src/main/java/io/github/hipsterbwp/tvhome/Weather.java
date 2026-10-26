@@ -8,11 +8,6 @@ import android.os.Looper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Locale;
 
@@ -84,7 +79,7 @@ final class Weather {
             String q = place.contains(",") ? place.substring(0, place.indexOf(',')).trim() : place;
             String url = "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name="
                     + URLEncoder.encode(q, "UTF-8") + (q.matches("\\d{5}") ? "&countryCode=US" : "");
-            JSONArray results = new JSONObject(get(url)).optJSONArray("results");
+            JSONArray results = new JSONObject(Net.get(url)).optJSONArray("results");
             if (results == null || results.length() == 0) return "Weather: place \"" + place + "\" not found";
             JSONObject r = results.getJSONObject(0);
             lat = String.valueOf(r.getDouble("latitude"));
@@ -96,26 +91,10 @@ final class Weather {
         String url = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code&timezone=auto"
                 + "&latitude=" + lat + "&longitude=" + lon
                 + (celsius ? "" : "&temperature_unit=fahrenheit");
-        JSONObject cur = new JSONObject(get(url)).getJSONObject("current");
+        JSONObject cur = new JSONObject(Net.get(url)).getJSONObject("current");
         long temp = Math.round(cur.getDouble("temperature_2m"));
-        return temp + (celsius ? "°C" : "°F") + "  " + describe(cur.optInt("weather_code", -1)) + "\n" + name;
-    }
-
-    private static String get(String address) throws IOException {
-        HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
-        c.setConnectTimeout(10000);
-        c.setReadTimeout(10000);
-        try {
-            if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode());
-            InputStream in = c.getInputStream();
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            return out.toString("UTF-8");
-        } finally {
-            c.disconnect();
-        }
+        String sky = describe(cur.optInt("weather_code", -1));
+        return temp + "°" + (sky.isEmpty() ? "" : "  " + sky);
     }
 
     /** WMO weather interpretation codes, as documented by Open-Meteo. */
