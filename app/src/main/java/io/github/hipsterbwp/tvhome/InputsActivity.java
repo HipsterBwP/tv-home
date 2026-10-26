@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -28,8 +29,14 @@ import java.util.List;
  */
 public class InputsActivity extends Activity {
     @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        return Nav.move(this, e) || super.dispatchKeyEvent(e);
+    }
+
+    @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Nav.warmUp(this);
         DisplayMetrics m = getResources().getDisplayMetrics();
         int screenH = Math.min(m.widthPixels, m.heightPixels);
         int side = Tiles.dp(this, 56);

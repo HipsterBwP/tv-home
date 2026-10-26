@@ -2,7 +2,6 @@ package io.github.hipsterbwp.tvhome;
 
 import android.content.Context;
 import android.graphics.Rect;
-import android.view.SoundEffectConstants;
 import android.view.View;
 import android.widget.ScrollView;
 
@@ -21,14 +20,6 @@ final class FadeList extends ScrollView {
         setFadingEdgeLength(fadeLength);
         setOverScrollMode(OVER_SCROLL_NEVER);
         setClipChildren(false);
-    }
-
-    // ScrollView moves focus for UP/DOWN itself, which skips the system's navigation click.
-    @Override
-    public boolean arrowScroll(int direction) {
-        boolean moved = super.arrowScroll(direction);
-        if (moved) playSoundEffect(SoundEffectConstants.getContantForFocusDirection(direction));
-        return moved;
     }
 
     // ScrollView jumps to focused children through this; return 0 so we can glide instead.

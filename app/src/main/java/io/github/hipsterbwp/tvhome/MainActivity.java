@@ -19,6 +19,7 @@ import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -120,8 +121,14 @@ public class MainActivity extends Activity {
     };
 
     @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        return Nav.move(this, e) || super.dispatchKeyEvent(e);
+    }
+
+    @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Nav.warmUp(this);
         weather = new Weather(this);
         wallpaper = new Wallpaper(this);
         ui = getSharedPreferences("ui", MODE_PRIVATE);

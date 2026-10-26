@@ -10,6 +10,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -28,8 +29,14 @@ public class AllAppsActivity extends Activity {
     private static final int COLUMNS = 7;
 
     @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        return Nav.move(this, e) || super.dispatchKeyEvent(e);
+    }
+
+    @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Nav.warmUp(this);
         final PackageManager pm = getPackageManager();
 
         Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
