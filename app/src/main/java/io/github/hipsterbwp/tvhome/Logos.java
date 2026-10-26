@@ -62,13 +62,24 @@ final class Logos {
         }
         int br = median(rs, n), bg = median(gs, n), bb = median(bs, n);
 
+        // Thresholds scale with the strongest contrast in the icon, so gentle background
+        // gradients drop out while the artwork, which stands out most, stays.
+        double[] dist = new double[px.length];
+        double max = 0;
+        for (int i = 0; i < px.length; i++) {
+            int p = px[i];
+            if (Color.alpha(p) < 128) continue;
+            int dr = Color.red(p) - br, dg = Color.green(p) - bg, db = Color.blue(p) - bb;
+            dist[i] = Math.sqrt(dr * dr + dg * dg + db * db);
+            max = Math.max(max, dist[i]);
+        }
+        double lo = Math.max(45, max * 0.5), hi = Math.max(lo + 20, max * 0.8);
+
         int minX = size, minY = size, maxX = -1, maxY = -1;
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
                 int p = px[y * size + x];
-                int dr = Color.red(p) - br, dg = Color.green(p) - bg, db = Color.blue(p) - bb;
-                double dist = Math.sqrt(dr * dr + dg * dg + db * db);
-                int a = (int) Math.max(0, Math.min(255, (dist - 45) * 255 / 70));
+                int a = (int) Math.max(0, Math.min(255, (dist[y * size + x] - lo) * 255 / (hi - lo)));
                 a = a * Color.alpha(p) / 255;
                 px[y * size + x] = a << 24 | 0xFFFFFF;
                 if (a > 40) {

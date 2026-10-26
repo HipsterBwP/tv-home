@@ -134,7 +134,7 @@ final class Tiles {
         return box;
     }
 
-    /** A home-list row: a white logo sized to the name's letters, and the name; soft pill on focus. */
+    /** A home-list row: a white logo in a fixed slot, then the name; soft pill on focus. */
     static View row(Context c, Drawable logo, CharSequence name, View.OnClickListener onClick) {
         final LinearLayout r = new LinearLayout(c);
         r.setOrientation(LinearLayout.HORIZONTAL);
@@ -145,16 +145,12 @@ final class Tiles {
         r.setContentDescription(name);
         r.setOnClickListener(onClick);
 
-        // Logo height matches the capital letters of the 32sp name; width follows its shape.
-        int h = dp(c, 25);
-        int w = h;
-        if (logo != null && logo.getIntrinsicHeight() > 0) {
-            w = Math.min(h * 3, Math.round(h * logo.getIntrinsicWidth() / (float) logo.getIntrinsicHeight()));
-        }
+        // Every logo gets the same slot, about the height of the name's capitals, so the logos
+        // read as one size and every name starts at the same x.
         ImageView img = new ImageView(c);
         img.setImageDrawable(logo);
         img.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(w, h);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(c, 30), dp(c, 24));
         ip.topMargin = dp(c, 2);
         r.addView(img, ip);
 
@@ -166,7 +162,7 @@ final class Tiles {
         t.setShadowLayer(dp(c, 4), 0, dp(c, 1), 0x55000000);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tp.leftMargin = dp(c, logo == null ? 0 : 12);
+        tp.leftMargin = dp(c, 12);
         r.addView(t, tp);
 
         final GradientDrawable pill = rounded(0x33FFFFFF, dp(c, 14));
