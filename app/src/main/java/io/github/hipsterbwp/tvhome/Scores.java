@@ -5,94 +5,89 @@ import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * Scores for the followed teams from ESPN's public score feed (no account or key; ESPN does not
- * document it, so it may change). Call {@link #load} off the main thread.
+ * League scoreboards from ESPN's public score feed (no account or key; ESPN does not document
+ * it, so it may change). College leagues keep only games with a Top 25 team. Call
+ * {@link #load} off the main thread.
  */
 final class Scores {
-    /** A followed team: name (for problem reports), ESPN sport path and team id. */
-    static final String[][] TEAMS = {
-            {"WILDCATS FOOTBALL", "football/college-football", "96"},
-            {"WILDCATS BASKETBALL", "basketball/mens-college-basketball", "96"},
-            {"STEELERS", "football/nfl", "pit"},
+    /** Heading, ESPN sport path, scoreboard query, and whether to keep only ranked matchups. */
+    private static final Object[][] LEAGUES = {
+            {"NCAA FOOTBALL", "football/college-football", "groups=80&limit=300", true},
+            {"NFL", "football/nfl", "limit=100", false},
+            {"NCAA BASKETBALL", "basketball/mens-college-basketball", "groups=50&limit=400", true},
     };
 
-    /** How far from a game a team stays on screen; outside this, its season is treated as over. */
+    /** Games further than this from now are ignored, so a league disappears between seasons. */
     private static final long WINDOW_MS = 14L * 24 * 60 * 60 * 1000;
-    /** A final score stays up this long before the next game takes its place. */
-    private static final long FINAL_MS = 36L * 60 * 60 * 1000;
 
     static final class Game {
         String homeName, awayName, homeScore, awayScore, status;
+        int homeRank, awayRank;
         boolean live, upcoming, homeWon, awayWon;
         long start;
     }
 
-    /** Why each team was left out on the last load, for the workflow's scores check. */
-    static final List<String> problems = new ArrayList<>();
+    static final class League {
+        final String heading;
+        final List<Game> games = new ArrayList<>();
 
-    /** One entry per team that is in season; nothing for teams between seasons or on errors. */
-    static List<Game> load() {
-        problems.clear();
-        List<Game> out = new ArrayList<>();
+        League(String heading) {
+            this.heading = heading;
+        }
+    }
+
+    /** Leagues with at least one game near now; a league whose feed fails is left out. */
+    static List<League> load() {
+        List<League> out = new ArrayList<>();
         long now = System.currentTimeMillis();
-        for (String[] t : TEAMS) {
+        for (Object[] l : LEAGUES) {
             try {
-                Game g = pick(t, now);
-                if (g != null) out.add(g);
-                else problems.add(t[0] + ": no game within two weeks");
-            } catch (Exception e) {
-                // Feed unreachable or changed: leave this team out rather than show stale data.
-                problems.add(t[0] + ": " + e);
+                League league = league((String) l[0], (String) l[1], (String) l[2], (Boolean) l[3], now);
+                if (!league.games.isEmpty()) out.add(league);
+            } catch (Exception ignored) {
+                // Feed unreachable or changed: leave this league out rather than show stale data.
             }
         }
         return out;
     }
 
-    private static Game pick(String[] team, long now) throws Exception {
-        String base = "https://site.api.espn.com/apis/site/v2/sports/" + team[1] + "/teams/" + team[2] + "/schedule";
-        List<JSONObject> events = new ArrayList<>();
-        for (String url : new String[] {base, base + "?seasontype=3"}) {
-            JSONArray arr = new JSONObject(Net.get(url)).optJSONArray("events");
-            for (int i = 0; arr != null && i < arr.length(); i++) events.add(arr.getJSONObject(i));
+    private static League league(String heading, String sport, String query, boolean rankedOnly, long now)
+            throws Exception {
+        String url = "https://site.api.espn.com/apis/site/v2/sports/" + sport + "/scoreboard?" + query;
+        JSONArray events = new JSONObject(Net.get(url, 6 * 1024 * 1024)).optJSONArray("events");
+        League league = new League(heading);
+        for (int i = 0; events != null && i < events.length(); i++) {
+            Game g = game(events.getJSONObject(i));
+            if (g == null || Math.abs(g.start - now) > WINDOW_MS) continue;
+            if (rankedOnly && g.homeRank == 0 && g.awayRank == 0) continue;
+            league.games.add(g);
         }
+        // Live games first, then the latest finals, then the soonest upcoming games.
+        Collections.sort(league.games, new Comparator<Game>() {
+            @Override
+            public int compare(Game a, Game b) {
+                int ga = group(a), gb = group(b);
+                if (ga != gb) return ga - gb;
+                return ga == 1 ? Long.compare(b.start, a.start) : Long.compare(a.start, b.start);
+            }
 
-        JSONObject live = null, last = null, next = null;
-        long lastT = Long.MIN_VALUE, nextT = Long.MAX_VALUE;
-        for (JSONObject e : events) {
-            JSONObject comp = e.getJSONArray("competitions").getJSONObject(0);
-            String state = comp.getJSONObject("status").getJSONObject("type").optString("state");
-            long t = time(e.optString("date"));
-            if ("in".equals(state)) live = e;
-            else if ("post".equals(state) && t > lastT) { last = e; lastT = t; }
-            else if ("pre".equals(state) && t > now - 6 * 3600_000L && t < nextT) { next = e; nextT = t; }
-        }
-
-        if (live != null) return game(live, refresh(team, live));
-        boolean recentFinal = last != null && now - lastT < FINAL_MS;
-        if (recentFinal) return game(last, null);
-        if (next != null && nextT - now < WINDOW_MS) return game(next, null);
-        if (last != null && now - lastT < WINDOW_MS) return game(last, null);
-        return null;
+            private int group(Game g) {
+                return g.live ? 0 : g.upcoming ? 2 : 1;
+            }
+        });
+        return league;
     }
 
-    /** Live games get the summary feed, which updates faster than the schedule. */
-    private static JSONObject refresh(String[] team, JSONObject event) {
-        try {
-            String url = "https://site.api.espn.com/apis/site/v2/sports/" + team[1] + "/summary?event=" + event.getString("id");
-            return new JSONObject(Net.get(url)).getJSONObject("header").getJSONArray("competitions").getJSONObject(0);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static Game game(JSONObject event, JSONObject fresh) throws Exception {
-        JSONObject comp = fresh != null ? fresh : event.getJSONArray("competitions").getJSONObject(0);
+    private static Game game(JSONObject event) throws Exception {
+        JSONObject comp = event.getJSONArray("competitions").getJSONObject(0);
         JSONObject type = comp.getJSONObject("status").getJSONObject("type");
         Game g = new Game();
         g.start = time(event.optString("date"));
@@ -106,12 +101,14 @@ final class Scores {
             String name = team.optString("shortDisplayName", team.optString("location", team.optString("displayName")));
             String score = score(c);
             boolean won = c.optBoolean("winner", false);
+            int rank = rank(c);
             if ("home".equals(c.optString("homeAway"))) {
-                g.homeName = name; g.homeScore = score; g.homeWon = won;
+                g.homeName = name; g.homeScore = score; g.homeWon = won; g.homeRank = rank;
             } else {
-                g.awayName = name; g.awayScore = score; g.awayWon = won;
+                g.awayName = name; g.awayScore = score; g.awayWon = won; g.awayRank = rank;
             }
         }
+        if (g.homeName == null || g.awayName == null) return null;
         if (g.upcoming) {
             String when = new SimpleDateFormat("EEE h:mm a", Locale.US).format(new Date(g.start));
             String tv = broadcast(comp);
@@ -121,6 +118,13 @@ final class Scores {
             g.status = type.optString("shortDetail", g.live ? "Live" : "Final");
         }
         return g;
+    }
+
+    /** Top 25 rank, or 0 when unranked (ESPN uses 99 for unranked). */
+    private static int rank(JSONObject competitor) {
+        JSONObject r = competitor.optJSONObject("curatedRank");
+        int n = r == null ? 0 : r.optInt("current", 0);
+        return n >= 1 && n <= 25 ? n : 0;
     }
 
     private static String score(JSONObject competitor) {

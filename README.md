@@ -2,8 +2,8 @@
 
 An ad-free home screen for an Android TV: a mountain night-sky photo, a list of app names on the left that glides and fades at its edges as
 you scroll, the time at top right, and **All apps** and **Settings** at bottom
-right, with a daily NKJV verse along the bottom, scores for the Kentucky
-Wildcats (football and basketball) and the Pittsburgh Steelers on the right, and
+right, with a daily NKJV verse along the bottom, rotating NCAA football (Top 25),
+NFL and NCAA men's basketball (Top 25) scores on the right, and
 an Inputs screen for HDMI and Live TV. Plain Java, no libraries, no tracking. Optional weather comes from
 [Open-Meteo](https://open-meteo.com) (free, no account).
 
@@ -81,6 +81,8 @@ line, New King James Version). Each year is shuffled differently and a new
 verse shows at midnight. Scripture taken from the New King James Version®.
 Copyright © 1982 by Thomas Nelson. Used by permission. All rights reserved.
 
-Scores come from ESPN's public score feed, which ESPN does not document. A team
-appears from two weeks before its next game until two weeks after its last one,
-so it disappears between seasons. The followed teams are in `Scores.TEAMS`.
+Scores come from ESPN's public score feed, which ESPN does not document. Each
+league section moves to its next game every 5 seconds: live games first, then
+recent finals, then upcoming games. College sections only include games with a
+Top 25 team. A league disappears when it has no game within two weeks, so it
+hides between seasons. The leagues are listed in `Scores.LEAGUES`.

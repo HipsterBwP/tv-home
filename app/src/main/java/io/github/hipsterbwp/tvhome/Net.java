@@ -11,7 +11,11 @@ final class Net {
     private Net() {}
 
     static String get(String address) throws IOException {
-        return new String(bytes(address, 1024 * 1024), "UTF-8");
+        return get(address, 1024 * 1024);
+    }
+
+    static String get(String address, int max) throws IOException {
+        return new String(bytes(address, max), "UTF-8");
     }
 
     static byte[] bytes(String address, int max) throws IOException {

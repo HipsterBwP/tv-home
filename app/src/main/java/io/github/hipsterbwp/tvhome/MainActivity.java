@@ -29,8 +29,10 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The home screen: a full-screen picture, a fading list of app names on the left, the time
@@ -60,6 +62,9 @@ public class MainActivity extends Activity {
     private TextView weatherView, creditView;
     private View inputs, allApps;
     private LinearLayout scoresBox;
+    private List<Scores.League> scoreLeagues = new ArrayList<>();
+    private final List<FrameLayout> scoreSlots = new ArrayList<>();
+    private final Map<String, Integer> scorePos = new HashMap<>();
     private TextView verseText, verseRef;
     private int verseDay = -1;
     private Weather weather;
@@ -86,15 +91,23 @@ public class MainActivity extends Activity {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    final List<Scores.Game> games = Scores.load();
+                    final List<Scores.League> leagues = Scores.load();
                     handler.post(new Runnable() {
                         @Override
                         public void run() {
-                            showScores(games);
+                            showScores(leagues);
                         }
                     });
                 }
             }, "scores").start();
+        }
+    };
+
+    private final Runnable rotateTick = new Runnable() {
+        @Override
+        public void run() {
+            rotateScores();
+            handler.postDelayed(this, 5000);
         }
     };
 
@@ -278,6 +291,8 @@ public class MainActivity extends Activity {
         handler.post(verseTick);
         handler.removeCallbacks(scoresTick);
         handler.post(scoresTick);
+        handler.removeCallbacks(rotateTick);
+        handler.postDelayed(rotateTick, 5000);
     }
 
     @Override
@@ -285,6 +300,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(weatherTick);
         handler.removeCallbacks(verseTick);
         handler.removeCallbacks(scoresTick);
+        handler.removeCallbacks(rotateTick);
         super.onPause();
     }
 
@@ -348,31 +364,72 @@ public class MainActivity extends Activity {
         verseRef.setText(v.reference.toUpperCase(Locale.US) + " \u00B7 NKJV");
     }
 
-    /** Renders the in-season teams and schedules the next refresh: every minute around games. */
-    private void showScores(List<Scores.Game> games) {
+    /** Rebuilds the league sections and schedules the next refresh: every minute around games. */
+    private void showScores(List<Scores.League> leagues) {
         scoresBox.removeAllViews();
+        scoreSlots.clear();
         long now = System.currentTimeMillis();
         boolean busy = false;
-        for (Scores.Game g : games) {
-            busy |= g.live || g.upcoming && g.start - now < 30 * 60 * 1000L;
-            LinearLayout block = new LinearLayout(this);
-            block.setOrientation(LinearLayout.VERTICAL);
-            block.addView(scoreLine(g.awayName, g.awayScore, g.awayWon));
-            block.addView(scoreLine(g.homeName, g.homeScore, g.homeWon));
-            TextView st = scoreText(g.live ? "\u25CF LIVE  " + g.status : g.status, 10, 0xBFFFFFFF);
-            if (g.live) {
-                SpannableString span = new SpannableString(st.getText());
-                span.setSpan(new ForegroundColorSpan(0xFFFF5A5A), 0, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                st.setText(span);
-            }
-            block.addView(st);
+        Map<String, Integer> kept = new HashMap<>(scorePos);
+        scorePos.clear();
+        scoreLeagues = leagues;
+        for (Scores.League league : leagues) {
+            for (Scores.Game g : league.games) busy |= g.live || g.upcoming && g.start - now < 30 * 60 * 1000L;
+            TextView heading = scoreText(league.heading, 10, 0xBFFFFFFF);
+            heading.setLetterSpacing(0.15f);
+            heading.setTypeface(Tiles.MEDIUM);
+            heading.setPadding(0, 0, 0, Tiles.dp(this, 4));
+            FrameLayout slot = new FrameLayout(this);
+            Integer at = kept.get(league.heading);
+            int pos = at == null ? 0 : at % league.games.size();
+            scorePos.put(league.heading, pos);
+            slot.addView(gameView(league.games.get(pos)));
+            scoreSlots.add(slot);
+            LinearLayout section = new LinearLayout(this);
+            section.setOrientation(LinearLayout.VERTICAL);
+            section.addView(heading);
+            section.addView(slot);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             bp.bottomMargin = Tiles.dp(this, 20);
-            scoresBox.addView(block, bp);
+            scoresBox.addView(section, bp);
         }
         handler.removeCallbacks(scoresTick);
         handler.postDelayed(scoresTick, busy ? 60 * 1000L : 15 * 60 * 1000L);
+    }
+
+    /** Moves every league with more than one game on to its next game, with a short fade. */
+    private void rotateScores() {
+        for (int i = 0; i < scoreLeagues.size() && i < scoreSlots.size(); i++) {
+            final Scores.League league = scoreLeagues.get(i);
+            if (league.games.size() < 2) continue;
+            final int next = (scorePos.get(league.heading) + 1) % league.games.size();
+            scorePos.put(league.heading, next);
+            final FrameLayout slot = scoreSlots.get(i);
+            slot.animate().alpha(0f).setDuration(300).withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    slot.removeAllViews();
+                    slot.addView(gameView(league.games.get(next)));
+                    slot.animate().alpha(1f).setDuration(300).start();
+                }
+            }).start();
+        }
+    }
+
+    private View gameView(Scores.Game g) {
+        LinearLayout block = new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        block.addView(scoreLine(g.awayRank, g.awayName, g.awayScore, g.awayWon));
+        block.addView(scoreLine(g.homeRank, g.homeName, g.homeScore, g.homeWon));
+        TextView st = scoreText(g.live ? "\u25CF LIVE  " + g.status : g.status, 10, 0xBFFFFFFF);
+        if (g.live) {
+            SpannableString span = new SpannableString(st.getText());
+            span.setSpan(new ForegroundColorSpan(0xFFFF5A5A), 0, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            st.setText(span);
+        }
+        block.addView(st);
+        return block;
     }
 
     private TextView scoreText(String text, float sp, int color) {
@@ -386,11 +443,12 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private View scoreLine(String team, String score, boolean won) {
+    private View scoreLine(int rank, String team, String score, boolean won) {
         LinearLayout line = new LinearLayout(this);
         line.setOrientation(LinearLayout.HORIZONTAL);
         int color = won ? Color.WHITE : 0xD9FFFFFF;
-        TextView name = scoreText(team == null ? "" : team, 16, color);
+        String label = team == null ? "" : rank > 0 ? "#" + rank + " " + team : team;
+        TextView name = scoreText(label, 16, color);
         TextView pts = scoreText(score == null ? "" : score, 16, color);
         if (won) {
             name.setTypeface(Typeface.DEFAULT_BOLD);
