@@ -14,6 +14,23 @@ android {
         versionName "1." + (System.getenv("VERSION_CODE") ?: "0")
     }
 
+    // Release builds are signed with the private key the workflow decrypts; see build.yml.
+    signingConfigs {
+        release {
+            storeFile System.getenv("SIGNING_KEYSTORE") ? file(System.getenv("SIGNING_KEYSTORE")) : null
+            storePassword System.getenv("SIGNING_PASSWORD")
+            keyAlias "tvhome"
+            keyPassword System.getenv("SIGNING_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8

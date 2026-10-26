@@ -17,9 +17,9 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * The background picture and a blurred copy. The source is "night" (a starry sky over a
- * mountain, drawn on the TV, the default), "daily" (Bing's photo of the day, refreshed
- * daily), "none" (a plain gradient), or an https URL of your own picture.
+ * The background picture and a blurred copy. The source is "photo" (the built-in mountain
+ * night photo, the default), "night" (a starry sky drawn on the TV), "daily" (Bing's photo
+ * of the day), "none" (a plain gradient), or an https URL of your own picture.
  */
 final class Wallpaper {
     interface Callback {
@@ -47,7 +47,7 @@ final class Wallpaper {
 
     /** Calls back on the main thread with the current photo, or nulls for the plain gradient. */
     void load(final Callback cb) {
-        final String source = prefs.getString("source", "night");
+        final String source = prefs.getString("source", "photo");
         final String day = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date());
         final String key = source + "|" + ("daily".equals(source) ? day : "");
         if (key.equals(loadedKey)) {
@@ -59,7 +59,12 @@ final class Wallpaper {
             public void run() {
                 Bitmap p = null;
                 String c = "";
-                if ("night".equals(source)) {
+                if ("photo".equals(source)) {
+                    BitmapFactory.Options o = new BitmapFactory.Options();
+                    o.inScaled = false;
+                    Bitmap raw = BitmapFactory.decodeResource(app.getResources(), R.drawable.background, o);
+                    p = raw == null ? null : fit(raw);
+                } else if ("night".equals(source)) {
                     DisplayMetrics m = app.getResources().getDisplayMetrics();
                     p = NightSky.draw(Math.max(m.widthPixels, m.heightPixels),
                             Math.min(m.widthPixels, m.heightPixels));
@@ -134,7 +139,13 @@ final class Wallpaper {
             o.inSampleSize *= 2;
         }
         Bitmap src = BitmapFactory.decodeFile(file.getPath(), o);
-        if (src == null) return null;
+        return src == null ? null : fit(src);
+    }
+
+    /** Centre-crops and scales a picture to fill the screen. */
+    private Bitmap fit(Bitmap src) {
+        DisplayMetrics m = app.getResources().getDisplayMetrics();
+        int sw = Math.max(m.widthPixels, m.heightPixels), sh = Math.min(m.widthPixels, m.heightPixels);
         float scale = Math.max(sw / (float) src.getWidth(), sh / (float) src.getHeight());
         int cw = Math.round(sw / scale), ch = Math.round(sh / scale);
         int x = (src.getWidth() - cw) / 2, y = (src.getHeight() - ch) / 2;

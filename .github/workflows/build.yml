@@ -25,17 +25,39 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      # Same signing key across builds, so updates install over the old version.
-      # If the cache expires (7 days unused), the next update needs an uninstall first.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: tv-home-signing-key-v1
+      # One permanent signing key, so updates install over the previous version.
+      # The key is created on the first run, encrypted with the SIGNING_PASSWORD
+      # repository secret, and committed as signing/release.jks.enc. It is never
+      # stored unencrypted anywhere.
+      - name: Signing key
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          if [ "${#SIGNING_PASSWORD}" -lt 12 ]; then
+            echo "::error::Add a repository secret named SIGNING_PASSWORD (12+ characters): Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          key="$RUNNER_TEMP/release.jks"
+          if [ -f signing/release.jks.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in signing/release.jks.enc -out "$key" -pass env:SIGNING_PASSWORD
+          else
+            keytool -genkeypair -keystore "$key" -storetype PKCS12 -alias tvhome -keyalg RSA -keysize 3072 \
+              -validity 36500 -dname "CN=TV Home" -storepass "$SIGNING_PASSWORD" -keypass "$SIGNING_PASSWORD"
+            mkdir -p signing
+            openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$key" -out signing/release.jks.enc -pass env:SIGNING_PASSWORD
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add signing/release.jks.enc
+            git commit -m "chore: add encrypted signing key"
+            git push
+          fi
+          echo "SIGNING_KEYSTORE=$key" >> "$GITHUB_ENV"
 
       - name: Build
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleRelease
         env:
           VERSION_CODE: ${{ github.run_number }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
 
       - name: Publish release
         env:
@@ -43,7 +65,11 @@ jobs:
           TAG: v1.${{ github.run_number }}
         run: |
           apk="tv-home-$TAG.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
           sha256sum "$apk"
           gh release create "$TAG" "$apk" --target "$GITHUB_SHA" \
             --title "TV Home $TAG" --notes "Built by GitHub Actions from $GITHUB_SHA."
+
+      - name: Remove decrypted key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

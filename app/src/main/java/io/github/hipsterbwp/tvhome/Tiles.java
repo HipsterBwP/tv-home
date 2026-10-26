@@ -6,8 +6,6 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -136,8 +134,8 @@ final class Tiles {
         return box;
     }
 
-    /** A home-list row: small icon (grey until focused) and a big name, with a soft pill on focus. */
-    static View row(Context c, Drawable icon, CharSequence name, View.OnClickListener onClick) {
+    /** A home-list row: a white logo sized to the name's letters, and the name; soft pill on focus. */
+    static View row(Context c, Drawable logo, CharSequence name, View.OnClickListener onClick) {
         final LinearLayout r = new LinearLayout(c);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
@@ -147,24 +145,18 @@ final class Tiles {
         r.setContentDescription(name);
         r.setOnClickListener(onClick);
 
-        final ImageView img = new ImageView(c);
-        img.setImageDrawable(icon);
+        // Logo height matches the capital letters of the 32sp name; width follows its shape.
+        int h = dp(c, 25);
+        int w = h;
+        if (logo != null && logo.getIntrinsicHeight() > 0) {
+            w = Math.min(h * 3, Math.round(h * logo.getIntrinsicWidth() / (float) logo.getIntrinsicHeight()));
+        }
+        ImageView img = new ImageView(c);
+        img.setImageDrawable(logo);
         img.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        final int corner = dp(c, 6);
-        img.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), corner);
-            }
-        });
-        img.setClipToOutline(true);
-        ColorMatrix grey = new ColorMatrix();
-        grey.setSaturation(0);
-        final ColorMatrixColorFilter mono = new ColorMatrixColorFilter(grey);
-        img.setColorFilter(mono);
-        img.setAlpha(0.9f);
-        int s = dp(c, 26);
-        r.addView(img, new LinearLayout.LayoutParams(s, s));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(w, h);
+        ip.topMargin = dp(c, 2);
+        r.addView(img, ip);
 
         TextView t = new TextView(c);
         t.setText(name);
@@ -174,7 +166,7 @@ final class Tiles {
         t.setShadowLayer(dp(c, 4), 0, dp(c, 1), 0x55000000);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tp.leftMargin = dp(c, 12);
+        tp.leftMargin = dp(c, logo == null ? 0 : 12);
         r.addView(t, tp);
 
         final GradientDrawable pill = rounded(0x33FFFFFF, dp(c, 14));
@@ -182,8 +174,6 @@ final class Tiles {
             @Override
             public void onFocusChange(View v, boolean focused) {
                 r.setBackground(focused ? pill : null);
-                img.setColorFilter(focused ? null : mono);
-                img.setAlpha(focused ? 1f : 0.9f);
             }
         });
         return r;

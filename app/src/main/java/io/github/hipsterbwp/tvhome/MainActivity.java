@@ -29,7 +29,7 @@ import java.util.List;
  * The home screen: a full-screen picture, a fading list of app names on the left, the time
  * at top right, and All apps and Settings at bottom right. Options, set from adb with
  * {@code am start -n io.github.hipsterbwp.tvhome/.MainActivity}:
- * {@code --es wallpaper night|daily|none|https://...}, {@code --es weather show|hide},
+ * {@code --es wallpaper photo|night|daily|none|https://...}, {@code --es weather show|hide},
  * {@code --es place <ZIP or town>}, {@code --es units c|f}.
  */
 public class MainActivity extends Activity {
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
             final String pkg = f[0];
             final Intent launch = Tiles.launchIntent(pm, pkg);
             if (launch == null) continue;
-            View row = Tiles.row(this, Tiles.icon(pm, pkg), Tiles.label(pm, pkg, f[1]),
+            View row = Tiles.row(this, Logos.forApp(this, pkg, Tiles.icon(pm, pkg)), Tiles.label(pm, pkg, f[1]),
                     new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
