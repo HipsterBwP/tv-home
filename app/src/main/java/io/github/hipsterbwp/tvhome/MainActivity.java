@@ -2,6 +2,7 @@ package io.github.hipsterbwp.tvhome;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -25,14 +26,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The home screen: a full-screen photo, the time with date and weather at top left, All apps
- * and Settings at top right, and a frosted dock of the chosen apps along the bottom.
- * Options, set from adb with {@code am start -n io.github.hipsterbwp.tvhome/.MainActivity}:
- * {@code --es place <ZIP or town>}, {@code --es units c|f},
- * {@code --es wallpaper daily|none|https://...}.
+ * The home screen: a full-screen picture, a fading list of app names on the left, the time
+ * at top right, and All apps and Settings at bottom right. Options, set from adb with
+ * {@code am start -n io.github.hipsterbwp.tvhome/.MainActivity}:
+ * {@code --es wallpaper night|daily|none|https://...}, {@code --es weather show|hide},
+ * {@code --es place <ZIP or town>}, {@code --es units c|f}.
  */
 public class MainActivity extends Activity {
-    /** Package and fallback name, in dock order. Missing or disabled apps are skipped. */
+    /** Package and fallback name, in list order. Missing or disabled apps are skipped. */
     private static final String[][] FAVORITES = {
             {"com.google.android.youtube.tv", "YouTube"},
             {"com.netflix.ninja", "Netflix"},
@@ -48,11 +49,12 @@ public class MainActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ImageView photo;
-    private Glass dock;
+    private LinearLayout list;
     private TextView weatherView, creditView;
     private View allApps;
     private Weather weather;
     private Wallpaper wallpaper;
+    private SharedPreferences ui;
     private String lastFocused;
 
     private final Runnable weatherTick = new Runnable() {
@@ -73,56 +75,63 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         weather = new Weather(this);
         wallpaper = new Wallpaper(this);
+        ui = getSharedPreferences("ui", MODE_PRIVATE);
         applyExtras(getIntent());
 
+        DisplayMetrics m = getResources().getDisplayMetrics();
+        int screenH = Math.min(m.widthPixels, m.heightPixels);
+        int side = Tiles.dp(this, 56);
+
         FrameLayout root = new FrameLayout(this);
-        root.setClipChildren(false);
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[] {0xFF3D6E8F, 0xFF1C3B57, 0xFF0D1B2A}));
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {0xFF0A1424, 0xFF14304A, 0xFF2E5A78}));
 
         photo = new ImageView(this);
         photo.setScaleType(ImageView.ScaleType.FIT_XY);
         root.addView(photo, match());
 
         View scrim = new View(this);
-        scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {0x66000000, 0x00000000, 0x00000000, 0x80000000}));
+        scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] {0x40000000, 0x00000000, 0x00000000}));
         root.addView(scrim, match());
 
-        int side = Tiles.dp(this, 56);
-
-        LinearLayout clock = new LinearLayout(this);
-        clock.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout corner = new LinearLayout(this);
+        corner.setOrientation(LinearLayout.VERTICAL);
+        corner.setGravity(Gravity.END);
         TextClock time = new TextClock(this);
         time.setFormat12Hour("h:mm");
         time.setFormat24Hour("H:mm");
         time.setTextColor(Color.WHITE);
-        time.setTypeface(Tiles.LIGHT);
-        time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 46);
-        time.setShadowLayer(Tiles.dp(this, 6), 0, Tiles.dp(this, 1), 0x55000000);
-        clock.addView(time);
-        LinearLayout sub = new LinearLayout(this);
-        sub.setOrientation(LinearLayout.HORIZONTAL);
-        TextClock date = new TextClock(this);
-        date.setFormat12Hour("EEEE, MMMM d");
-        date.setFormat24Hour("EEEE, MMMM d");
-        styleSub(date);
-        sub.addView(date);
+        time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        time.setTypeface(Tiles.MEDIUM);
+        time.setShadowLayer(Tiles.dp(this, 4), 0, Tiles.dp(this, 1), 0x55000000);
+        corner.addView(time);
         weatherView = new TextView(this);
-        styleSub(weatherView);
+        weatherView.setTextColor(0xD9FFFFFF);
+        weatherView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        weatherView.setShadowLayer(Tiles.dp(this, 3), 0, Tiles.dp(this, 1), 0x55000000);
         weatherView.setText(weather.cached());
-        LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        wp.leftMargin = Tiles.dp(this, 18);
-        sub.addView(weatherView, wp);
-        clock.addView(sub);
-        FrameLayout.LayoutParams cp = wrap(Gravity.TOP | Gravity.START);
-        cp.leftMargin = side;
-        cp.topMargin = Tiles.dp(this, 36);
-        root.addView(clock, cp);
+        corner.addView(weatherView);
+        FrameLayout.LayoutParams tp = wrap(Gravity.TOP | Gravity.END);
+        tp.rightMargin = side;
+        tp.topMargin = Tiles.dp(this, 34);
+        root.addView(corner, tp);
+
+        int fade = Tiles.dp(this, 64);
+        FadeList scroller = new FadeList(this, fade);
+        list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setClipChildren(false);
+        scroller.addView(list);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(screenH * 0.54f), Gravity.TOP | Gravity.START);
+        lp.leftMargin = side - Tiles.dp(this, 12);
+        lp.topMargin = Math.round(screenH * 0.20f);
+        root.addView(scroller, lp);
 
         LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.setGravity(Gravity.END);
         allApps = Tiles.button(this, Icons.grid(), "All apps", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -139,39 +148,22 @@ public class MainActivity extends Activity {
                 Tiles.launch(MainActivity.this, new Intent(Settings.ACTION_SETTINGS));
             }
         });
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        sp.leftMargin = Tiles.dp(this, 8);
-        actions.addView(settings, sp);
-        FrameLayout.LayoutParams ap = wrap(Gravity.TOP | Gravity.END);
-        ap.rightMargin = side - Tiles.dp(this, 14);
-        ap.topMargin = Tiles.dp(this, 40);
+        actions.addView(settings);
+        FrameLayout.LayoutParams ap = wrap(Gravity.BOTTOM | Gravity.END);
+        ap.rightMargin = side - Tiles.dp(this, 12);
+        ap.bottomMargin = Tiles.dp(this, 36);
         root.addView(actions, ap);
 
-        dock = new Glass(this, Tiles.dp(this, 28));
-        dock.setOrientation(LinearLayout.HORIZONTAL);
-        dock.setGravity(Gravity.CENTER);
-        dock.setPadding(Tiles.dp(this, 14), Tiles.dp(this, 10), Tiles.dp(this, 14), Tiles.dp(this, 10));
-        FrameLayout.LayoutParams dp = wrap(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        dp.bottomMargin = Tiles.dp(this, 52);
-        root.addView(dock, dp);
-
         creditView = new TextView(this);
-        creditView.setTextColor(0x99FFFFFF);
-        creditView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        creditView.setTextColor(0x80FFFFFF);
+        creditView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         creditView.setSingleLine(true);
-        FrameLayout.LayoutParams crp = wrap(Gravity.BOTTOM | Gravity.END);
-        crp.rightMargin = Tiles.dp(this, 20);
+        FrameLayout.LayoutParams crp = wrap(Gravity.BOTTOM | Gravity.START);
+        crp.leftMargin = side;
         crp.bottomMargin = Tiles.dp(this, 14);
         root.addView(creditView, crp);
 
         setContentView(root);
-    }
-
-    private void styleSub(TextView t) {
-        t.setTextColor(0xE6FFFFFF);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        t.setShadowLayer(Tiles.dp(this, 4), 0, Tiles.dp(this, 1), 0x66000000);
     }
 
     private static FrameLayout.LayoutParams match() {
@@ -192,17 +184,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        buildDock();
+        buildList();
         wallpaper.load(new Wallpaper.Callback() {
             @Override
             public void ready(Bitmap p, Bitmap blur, String credit) {
                 photo.setImageBitmap(p);
-                dock.setBlur(blur);
                 creditView.setText(credit);
             }
         });
+        boolean showWeather = "show".equals(ui.getString("weather", "hide"));
+        weatherView.setVisibility(showWeather ? View.VISIBLE : View.GONE);
         handler.removeCallbacks(weatherTick);
-        handler.post(weatherTick);
+        if (showWeather) handler.post(weatherTick);
     }
 
     @Override
@@ -224,25 +217,19 @@ public class MainActivity extends Activity {
         if (units != null) weather.setUnits(units);
         String wall = intent.getStringExtra("wallpaper");
         if (wall != null) wallpaper.setSource(wall);
+        String show = intent.getStringExtra("weather");
+        if (show != null) ui.edit().putString("weather", "show".equals(show.trim()) ? "show" : "hide").apply();
     }
 
-    private void buildDock() {
+    private void buildList() {
         PackageManager pm = getPackageManager();
-        List<View> items = new ArrayList<>();
+        List<View> rows = new ArrayList<>();
         List<String> keys = new ArrayList<>();
         for (String[] f : FAVORITES) {
-            final Intent launch = Tiles.launchIntent(pm, f[0]);
-            if (launch != null) keys.add(f[0]);
-        }
-        DisplayMetrics m = getResources().getDisplayMetrics();
-        int maxDock = m.widthPixels - Tiles.dp(this, 112 + 28);
-        int width = Math.min(Tiles.dp(this, 112), maxDock / Math.max(1, keys.size()));
-
-        for (final String pkg : keys) {
+            final String pkg = f[0];
             final Intent launch = Tiles.launchIntent(pm, pkg);
-            String fallback = pkg;
-            for (String[] f : FAVORITES) if (f[0].equals(pkg)) fallback = f[1];
-            View item = Tiles.item(this, Tiles.icon(pm, pkg), Tiles.label(pm, pkg, fallback), width,
+            if (launch == null) continue;
+            View row = Tiles.row(this, Tiles.icon(pm, pkg), Tiles.label(pm, pkg, f[1]),
                     new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
@@ -250,15 +237,19 @@ public class MainActivity extends Activity {
                             Tiles.launch(MainActivity.this, launch);
                         }
                     });
-            item.setNextFocusUpId(allApps.getId());
-            items.add(item);
+            row.setNextFocusRightId(allApps.getId());
+            rows.add(row);
+            keys.add(pkg);
         }
-        dock.removeAllViews();
-        for (View v : items) dock.addView(v);
-        dock.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-
+        list.removeAllViews();
+        for (View r : rows) {
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            p.bottomMargin = Tiles.dp(this, 4);
+            list.addView(r, p);
+        }
         int focus = lastFocused == null ? 0 : keys.indexOf(lastFocused);
-        if (focus >= 0 && focus < items.size()) items.get(focus).requestFocus();
+        if (focus >= 0 && focus < rows.size()) rows.get(focus).requestFocus();
         else allApps.requestFocus();
     }
 }

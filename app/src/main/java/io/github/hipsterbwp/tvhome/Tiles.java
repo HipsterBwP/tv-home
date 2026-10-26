@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -21,7 +23,7 @@ import android.widget.TextView;
 
 import java.util.List;
 
-/** App lookup and launching, plus the focusable dock items and buttons shared by both screens. */
+/** App lookup and launching, plus the focusable rows, grid items and buttons used by both screens. */
 final class Tiles {
     private Tiles() {}
 
@@ -134,29 +136,81 @@ final class Tiles {
         return box;
     }
 
-    /** A small top-bar button: line icon and text, with a light pill when focused. */
+    /** A home-list row: small icon (grey until focused) and a big name, with a soft pill on focus. */
+    static View row(Context c, Drawable icon, CharSequence name, View.OnClickListener onClick) {
+        final LinearLayout r = new LinearLayout(c);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(c, 12), dp(c, 5), dp(c, 18), dp(c, 5));
+        r.setFocusable(true);
+        r.setClickable(true);
+        r.setContentDescription(name);
+        r.setOnClickListener(onClick);
+
+        final ImageView img = new ImageView(c);
+        img.setImageDrawable(icon);
+        img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        final int corner = dp(c, 6);
+        img.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), corner);
+            }
+        });
+        img.setClipToOutline(true);
+        ColorMatrix grey = new ColorMatrix();
+        grey.setSaturation(0);
+        final ColorMatrixColorFilter mono = new ColorMatrixColorFilter(grey);
+        img.setColorFilter(mono);
+        img.setAlpha(0.9f);
+        int s = dp(c, 26);
+        r.addView(img, new LinearLayout.LayoutParams(s, s));
+
+        TextView t = new TextView(c);
+        t.setText(name);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 32);
+        t.setSingleLine(true);
+        t.setShadowLayer(dp(c, 4), 0, dp(c, 1), 0x55000000);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tp.leftMargin = dp(c, 12);
+        r.addView(t, tp);
+
+        final GradientDrawable pill = rounded(0x33FFFFFF, dp(c, 14));
+        r.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean focused) {
+                r.setBackground(focused ? pill : null);
+                img.setColorFilter(focused ? null : mono);
+                img.setAlpha(focused ? 1f : 0.9f);
+            }
+        });
+        return r;
+    }
+
+    /** A small corner button: text then a line icon, with a light pill when focused. */
     static View button(Context c, Drawable icon, String text, View.OnClickListener onClick) {
         final LinearLayout b = new LinearLayout(c);
         b.setOrientation(LinearLayout.HORIZONTAL);
-        b.setGravity(Gravity.CENTER_VERTICAL);
-        b.setPadding(dp(c, 14), dp(c, 8), dp(c, 16), dp(c, 8));
+        b.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        b.setPadding(dp(c, 12), dp(c, 6), dp(c, 12), dp(c, 6));
         b.setFocusable(true);
         b.setClickable(true);
         b.setOnClickListener(onClick);
-        ImageView img = new ImageView(c);
-        img.setImageDrawable(icon);
-        int s = dp(c, 18);
-        b.addView(img, new LinearLayout.LayoutParams(s, s));
         TextView t = new TextView(c);
         t.setText(text);
         t.setTextColor(Color.WHITE);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         t.setShadowLayer(dp(c, 3), 0, dp(c, 1), 0x66000000);
-        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tp.leftMargin = dp(c, 8);
-        b.addView(t, tp);
-        final GradientDrawable pill = rounded(0x40FFFFFF, dp(c, 20));
+        b.addView(t);
+        ImageView img = new ImageView(c);
+        img.setImageDrawable(icon);
+        int s = dp(c, 15);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(s, s);
+        ip.leftMargin = dp(c, 10);
+        b.addView(img, ip);
+        final GradientDrawable pill = rounded(0x33FFFFFF, dp(c, 16));
         b.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean focused) {

@@ -17,9 +17,9 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * The background photo and its blurred copy for the glass panels. The source is
- * "daily" (Bing's photo of the day, the default), "none" (a plain gradient), or an
- * https URL of your own picture. The photo is cached on disk and refreshed once a day.
+ * The background picture and a blurred copy. The source is "night" (a starry sky over a
+ * mountain, drawn on the TV, the default), "daily" (Bing's photo of the day, refreshed
+ * daily), "none" (a plain gradient), or an https URL of your own picture.
  */
 final class Wallpaper {
     interface Callback {
@@ -47,7 +47,7 @@ final class Wallpaper {
 
     /** Calls back on the main thread with the current photo, or nulls for the plain gradient. */
     void load(final Callback cb) {
-        final String source = prefs.getString("source", "daily");
+        final String source = prefs.getString("source", "night");
         final String day = new SimpleDateFormat("yyyyMMdd", Locale.US).format(new Date());
         final String key = source + "|" + ("daily".equals(source) ? day : "");
         if (key.equals(loadedKey)) {
@@ -59,7 +59,11 @@ final class Wallpaper {
             public void run() {
                 Bitmap p = null;
                 String c = "";
-                if (!"none".equals(source)) {
+                if ("night".equals(source)) {
+                    DisplayMetrics m = app.getResources().getDisplayMetrics();
+                    p = NightSky.draw(Math.max(m.widthPixels, m.heightPixels),
+                            Math.min(m.widthPixels, m.heightPixels));
+                } else if (!"none".equals(source)) {
                     File file = new File(app.getFilesDir(), "wallpaper.jpg");
                     boolean fresh = file.exists() && day.equals(prefs.getString("day", ""));
                     boolean needed = "daily".equals(source) ? !fresh : !file.exists();

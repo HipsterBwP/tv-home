@@ -1,10 +1,10 @@
 # TV Home
 
-An ad-free home screen for an Android TV: a full-screen photo, the time with
-date and weather, **All apps** and **Settings** buttons, and a frosted-glass dock
-of your apps. Plain Java, no libraries, no tracking. Weather comes from
-[Open-Meteo](https://open-meteo.com) (free, no account); the default photo is
-Bing's photo of the day.
+An ad-free home screen for an Android TV: a starry night-sky background drawn
+on the TV, a list of app names on the left that glides and fades at its edges as
+you scroll, the time at top right, and **All apps** and **Settings** at bottom
+right. Plain Java, no libraries, no tracking. Optional weather comes from
+[Open-Meteo](https://open-meteo.com) (free, no account).
 
 Each push to `main` builds the APK with GitHub Actions and publishes it under
 [Releases](../../releases).
@@ -31,6 +31,12 @@ If HOME still opens Google's screen, disable the stock launcher (reversible):
 adb shell pm disable-user --user 0 com.google.android.tvlauncher
 ```
 
+## Weather (hidden by default)
+
+```sh
+adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es weather show   # or: hide
+```
+
 ## Weather location
 
 ```sh
@@ -41,7 +47,8 @@ adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es units c    
 ## Background photo
 
 ```sh
-adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es wallpaper daily                  # Bing photo of the day (default)
+adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es wallpaper night                  # starry night (default)
+adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es wallpaper daily                  # Bing photo of the day
 adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es wallpaper https://example.com/x.jpg  # your own picture
 adb shell am start -n io.github.hipsterbwp.tvhome/.MainActivity --es wallpaper none                   # plain gradient
 ```
